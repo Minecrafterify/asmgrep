@@ -1,0 +1,14 @@
+ASMGREP_1.0 {
+    global:
+        asmgrep_search_file;
+        asmgrep_search_buffer;
+        asmgrep_result_count;
+        asmgrep_result_line_number;
+        asmgrep_result_text;
+        asmgrep_result_length;
+        asmgrep_free;
+        asmgrep_strerror;
+        asmgrep_version;
+    local:
+        *;
+};

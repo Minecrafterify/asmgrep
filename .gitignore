@@ -1,0 +1,10 @@
+build/
+benchmarks/data/
+__pycache__/
+*.pyc
+*.egg-info/
+*.class
+*.o
+*.so
+*.so.*
+*.jar
