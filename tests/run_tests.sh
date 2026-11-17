@@ -20,8 +20,17 @@ echo "== Native C++ =="
     -o "$TMPOUT/test_cpp" -L"$BUILD" -lasmgrep -Wl,-rpath,"$BUILD"
 "$TMPOUT/test_cpp"
 
-echo "== Python =="
+echo "== Python API =="
 "${PYTHON:-python3}" "$ROOT/tests/python/test_asmgrep.py"
+
+echo "== Differential: randomized =="
+"${PYTHON:-python3}" "$ROOT/tests/differential/test_randomized.py"
+
+echo "== Differential: SIMD boundaries =="
+"${PYTHON:-python3}" "$ROOT/tests/differential/test_boundaries.py"
+
+echo "== Differential: adversarial =="
+"${PYTHON:-python3}" "$ROOT/tests/differential/test_adversarial.py"
 
 echo "== Java =="
 if command -v javac >/dev/null 2>&1 && [ -f "$BUILD/asmgrep.jar" ]; then

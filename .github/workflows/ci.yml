@@ -1,0 +1,38 @@
+name: asmgrep CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm build-essential openjdk-21-jdk
+
+      - name: Show toolchain
+        run: |
+          nasm -v
+          gcc --version
+          java -version
+
+      - name: Clean build
+        run: make clean
+
+      - name: Build
+        run: make
+
+      - name: Run complete test suite
+        run: make test
