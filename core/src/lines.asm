@@ -144,6 +144,8 @@ export_fn ag_count_byte
 %define L_LS    rbp - 96            ; line start
 %define L_LE    rbp - 104           ; line end (index of newline or len)
 
+%define L_ANCHOR rbp - 112
+
 export_fn ag_scan
     push    rbp
     mov     rbp, rsp
@@ -165,7 +167,8 @@ export_fn ag_scan
     mov     [L_CNT], rax
     mov     [L_LNO], rax
     mov     [L_POS], rax
-    xor     r15d, r15d              ; search cursor (always a line start)
+    mov     qword [L_ANCHOR], -1
+    xor     r15d, r15d             ; search cursor (always a line start)
 
     test    r14, r14
     jz      .loop
@@ -186,6 +189,7 @@ export_fn ag_scan
     mov     rcx, r14
     test    dword [L_FLG], FLAG_SCALAR
     jnz     .scalar
+    lea     r8, [L_ANCHOR]
     call    ag_find_sse2
     jmp     .found
 .scalar:
