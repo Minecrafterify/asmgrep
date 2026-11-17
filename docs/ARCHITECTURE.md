@@ -1,74 +1,112 @@
+
 # Architecture
 
-## Components
+## Overview
 
-```text
-            +--------------+     +-------------------------+
- argv  ---> | cli/args.asm |     | bindings: C, C++, Python,|
-            | cli/main.asm |     | Java (JNI adapter)       |
-            | cli/output   |     +------------+-------------+
-            +------+-------+                  |  C ABI
-                   |                          v
-                   |               core/src/api.asm (libasmgrep.so)
-                   |                          |
-                   +-----------+--------------+
-                               v
-                    core/src/lines.asm   ag_scan  (line driver)
-                      |             |
-        search_scalar.asm     search_sse2.asm      (substring search)
-                               
-        mmap.asm / file.asm  (openat, fstat, mmap, munmap, close)
-        utils.asm            (strlen, strerror table, utoa, anonymous mmap)
-```
+All components share the same assembly core. All interfaces can perform searches in files and substrings.
 
-Every front end reaches the same two functions, `ag_scan` and the search
-routines beneath it. The CLI links the objects statically into an
-executable; `libasmgrep.so` links the same objects, plus `api.asm`, into a
-shared object. The Python, C++ and Java layers call only the exported C ABI.
+The CLI binary statically links the assembly core. The shared library dynamically links to the assembly core (along with `api.asm`), and provides a C interface.
 
-## Source files
+<img src="arch_dia.png" alt="asmgrep Architecture" width="700">
 
-| File | Role |
+The C++, Python and Java interfaces all make use of the shared C library. Java makes use of a JNI interface.
+
+In all cases, `ag_scan` is called, and one of the substring-search algorithms will be used.
+
+## Implementations
+
+### Core Search Logic
+
+| File | Responsibility |
 |---|---|
-| `core/src/search_scalar.asm` | `ag_find_scalar`, the reference substring search |
-| `core/src/search_sse2.asm` | `ag_find_sse2`, SSE2 candidate scan with verification |
-| `core/src/lines.asm` | `ag_memchr`, `ag_memrchr`, `ag_count_byte`, and `ag_scan` |
-| `core/src/file.asm` | `openat` and `fstat` wrappers; regular-file check |
-| `core/src/mmap.asm` | `ag_map_file`, `ag_unmap` |
-| `core/src/utils.asm` | strlen, errno text, decimal conversion, anonymous allocation |
-| `core/src/api.asm` | exported `asmgrep_*` functions and the result block |
-| `core/include/internal.inc` | syscall numbers, constants, symbol macros |
-| `cli/args.asm` | option parsing |
-| `cli/output.asm` | 64 KiB buffered stdout writer and the line callback |
-| `cli/main.asm` | `_start`, orchestration, exit codes |
+| `core/src/search_scalar.asm` | `ag_find_scalar` — reference substring-search implementation |
+| `core/src/search_sse2.asm` | `ag_find_sse2` — uses adaptive anchoring and SSE2 scanning of candidate substrings. Verifies substrings. |
+| `core/src/lines.asm` | `ag_memchr`, `ag_memrchr`, `ag_count_byte`, `ag_scan` |
 
-The CLI's output code lives in `cli/` because it is not part of the library.
+### File and Memory Access Functions
 
-## Design points
+| File | Responsibility |
+|---|---|
+| `core/src/file.asm` | `openat` and `fstat`, with checks to verify if the file is a regular file |
+| `core/src/mmap.asm` | Mapping and unmapping files — `ag_map_file` / `ag_unmap` |
+| `core/src/utils.asm` | String length utility, error messages, decimal conversion, and anonymous memory allocation |
 
-- **No libc.** All I/O uses raw `syscall`. Internal symbols are
-  `hidden`; the shared object exports only the nine `asmgrep_*` functions
-  (enforced by `core/libasmgrep.map`, version node `ASMGREP_1.0`, soname
-  `libasmgrep.so.1`).
-- **No global mutable state in the library.** Every search keeps its state
-  on its own stack and in its own result mapping, so independent searches
-  are thread-safe. The CLI's output buffer is a static buffer, which is
-  acceptable because the CLI is single-threaded.
-- **Position independence.** All code uses RIP-relative addressing, and the
-  errno table stores offsets rather than pointers, so the shared object has
-  no text relocations.
-- **Result ownership.** A result is one anonymous mapping (header, entry
-  table, NUL-terminated text arena). `asmgrep_free` unmaps it. The mapping
-  size is stored in the header, so no allocator is needed.
-- **Resource handling.** The file descriptor is closed as soon as the mapping
-  exists (or on any failure); the mapping is released after the search by
-  both the CLI and `asmgrep_search_file`.
-- **Callback-driven scan.** `ag_scan` calls a callback per matching line.
-  The CLI's callback appends to the output buffer; the library uses two
-  callbacks (count pass, fill pass).
+### Shared Library Interface
 
-## Calling conventions
+| File | Responsibility |
+|---|---|
+| `core/src/api.asm` | Provides the interface to the `asmgrep_` functions, and creates native results |
+| `core/include/internal.inc` | Contains system call values, constants, and macros for internal symbols |
 
-Assembly routines follow the System V AMD64 ABI. Callee-saved registers are
-preserved, the stack is 16-byte aligned at every `call` that can reach C
-code (the scan callbacks), and no routine relies on the red zone.
+### CLI Specific
+
+| File | Responsibility |
+|---|---|
+| `cli/args.asm` | Parsing command-line arguments |
+| `cli/output.asm` | Writing to standard output. A 64 KiB buffer is used. Callbacks for each matching line |
+| `cli/main.asm` | Entry point, control flow and exit-code handling |
+
+Output functionality is separated into `cli/` since it is not required in the shared library.
+
+## Design Decisions
+
+### No dependency on libc
+
+Linux system calls are used for all file and I/O operations.
+
+Symbols are not exported within the library. Only nine `asmgrep_` functions are exported. This is enforced in `core/libasmgrep.map`.
+
+The library uses:
+
+- Symbol version: `ASMGREP_1.0`
+- SONAME: `libasmgrep.so.1`
+
+### No shared state
+
+The library does not share any global state between searches. Instead, all state is held in stack variables and the result mapping for each search.
+
+As a result, multiple searches can be made concurrently without interference.
+
+The CLI has static output buffers, since it runs in a single thread.
+
+### Position Independent Code
+
+RIP-relative addressing is used.
+
+Error message strings have relative offsets. This means that the shared library has no text relocations.
+
+### Ownership of Results
+
+Each set of results in the library is allocated within a single anonymous mapping. Within this mapping:
+
+1. Result header
+2. Result entries
+3. Null-terminated text
+
+Calling `asmgrep_free` releases the entire mapping. Since the size of the mapping is known in the header, no separate memory allocation manager is required.
+
+### Memory Management
+
+Once a file has been mapped, the file descriptor is closed. If the mapping fails, then during error handling, the file descriptor is also closed.
+
+Once a search is complete, in both the CLI and `asmgrep_search_file`, the file mapping is freed.
+
+### Callback Based Searching
+
+`ag_scan` uses callback-based searching. The library itself does not handle output, nor allocate results.
+
+The interface defines the callback function.
+
+- Matching lines are added to the output buffer in the CLI.
+- In the first pass, the library uses a counting callback.
+- In the second pass, the library uses a filling callback to build the final result mapping.
+
+This means the searching functionality is cleanly separated from output and result allocation.
+
+## Calling Conventions
+
+Assembly functions conform to the System V AMD64 calling convention. This allows the functions to be used in C and other native interfaces.
+
+Registers that should be saved are saved. The stack is aligned to 16 bytes at all call sites. Callback functions follow correct alignment. No functions make use of the red zone.
+
+By following these calling conventions, the assembly core can be used by C, C++ and native Python bindings within the shared library. It can also be used with Java via JNI.

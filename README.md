@@ -16,6 +16,9 @@ Python and Java interfaces.
 - A header-only C++ wrapper, a `ctypes` Python package and a JNI-based Java
   API. None of them implements any search logic.
 - The core engine uses raw Linux system calls and has no libc dependency.
+- Adaptive SSE2 anchor selection for sufficiently large searches. The engine
+  samples the input to select a selective pattern byte, then caches that
+  choice across line searches to avoid repeating the sampling overhead.
 
 ## Requirements
 
@@ -58,6 +61,23 @@ and may follow the operands. Exit status: 0 a line matched, 1 none matched,
 asmgrep matches fixed strings in one file. It is not a drop-in grep: there is
 no regular-expression support, no multiple files, no stdin, and no
 `Binary file matches` handling; NUL and other bytes are printed as-is.
+
+## Search optimization
+
+The SSE2 search engine uses adaptive anchor selection for larger inputs.
+Instead of always searching for the final pattern byte, it samples the
+haystack and selects a pattern position whose byte appears relatively
+infrequently. SIMD scanning locates candidate matches, which are then
+verified against the full pattern.
+
+The selected anchor is cached across line searches within a scan. This
+avoids repeatedly sampling the input when processing files containing
+many matching lines.
+
+The scalar implementation remains available through `--scalar` for
+reference testing.
+
+See [Benchmarks](docs/BENCHMARKS.md) for methodology and measured results.
 
 ## C
 

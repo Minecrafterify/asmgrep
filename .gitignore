@@ -1,10 +1,39 @@
+
+# Build output
 build/
-benchmarks/data/
-__pycache__/
-*.pyc
-*.egg-info/
-*.class
 *.o
 *.so
 *.so.*
+*.a
+*.class
 *.jar
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+dist/
+.eggs/
+
+# Test and coverage output
+.coverage
+htmlcov/
+
+# Benchmark data
+benchmarks/data/
+
+# Temporary files
+*.tmp
+*.log
+*~
+.DS_Store
+
+# VS Code (keep shared settings)
+.vscode/*
+!.vscode/settings.json
+
+# Project extras
+roadmap.txt
