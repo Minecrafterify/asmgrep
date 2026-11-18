@@ -168,5 +168,87 @@ fi
 for _ in $(seq 1 200); do "$BIN" -c ERROR "$TMP/multi" >/dev/null || { note_fail "repeated run"; break; }; done
 note_pass
 
+# --- colored output ------------------------------------------------------------
+
+printf 'hello world\nfoo bar foo\nnothing here\nhello again\n' > "$TMP/color"
+
+red=$'\033[31m'
+reset=$'\033[0m'
+
+# --color=always: highlight every occurrence.
+printf 'hello world\nhello again\n' |
+    sed "s/hello/${red}hello${reset}/" > "$TMP/color.want"
+
+"$BIN" --color=always hello "$TMP/color" > "$TMP/color.got"
+if cmp -s "$TMP/color.want" "$TMP/color.got"; then
+    note_pass
+else
+    note_fail "--color=always highlighting"
+fi
+
+# Multiple matches on one line.
+"$BIN" --color=always foo "$TMP/color" > "$TMP/color.got"
+# Only the matching line is emitted.
+printf 'foo bar foo\n' |
+    sed "s/foo/${red}foo${reset}/g" > "$TMP/color.want"
+if cmp -s "$TMP/color.want" "$TMP/color.got"; then
+    note_pass
+else
+    note_fail "multiple matches highlighting"
+fi
+
+# --color=never must produce plain output.
+printf 'hello world\nhello again\n' > "$TMP/color.want"
+"$BIN" --color=never hello "$TMP/color" > "$TMP/color.got"
+if cmp -s "$TMP/color.want" "$TMP/color.got"; then
+    note_pass
+else
+    note_fail "--color=never"
+fi
+
+# --color=auto must not emit ANSI codes when stdout is piped.
+"$BIN" --color=auto hello "$TMP/color" > "$TMP/color.got"
+if ! grep -q $'\033' "$TMP/color.got"; then
+    note_pass
+else
+    note_fail "--color=auto when piped"
+fi
+
+# Line numbers remain outside the highlighted match.
+printf "1:${red}hello${reset} world\n4:${red}hello${reset} again\n" > "$TMP/color.want"
+"$BIN" --color=always -n hello "$TMP/color" > "$TMP/color.got"
+if cmp -s "$TMP/color.want" "$TMP/color.got"; then
+    note_pass
+else
+    note_fail "color with line numbers"
+fi
+
+# Count mode must never emit color sequences.
+printf '2\n' > "$TMP/color.want"
+"$BIN" --color=always -c hello "$TMP/color" > "$TMP/color.got"
+if cmp -s "$TMP/color.want" "$TMP/color.got"; then
+    note_pass
+else
+    note_fail "color with count mode"
+fi
+
+# The last color option wins.
+"$BIN" --color=always --color=never hello "$TMP/color" > "$TMP/color.got"
+printf 'hello world\nhello again\n' > "$TMP/color.want"
+if cmp -s "$TMP/color.want" "$TMP/color.got"; then
+    note_pass
+else
+    note_fail "last color option wins (never)"
+fi
+
+"$BIN" --color=never --color=always hello "$TMP/color" > "$TMP/color.got"
+printf 'hello world\nhello again\n' |
+    sed "s/hello/${red}hello${reset}/" > "$TMP/color.want"
+if cmp -s "$TMP/color.want" "$TMP/color.got"; then
+    note_pass
+else
+    note_fail "last color option wins (always)"
+fi
+
 echo "CLI tests: $pass passed, $fail failed"
 [ "$fail" = 0 ]

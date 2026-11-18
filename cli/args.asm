@@ -139,34 +139,73 @@ cli_parse:
     jmp     .next_arg
 .long_named:
     mov     r8, rdi
+
     lea     rsi, [opt_help]
     call    streq
     test    eax, eax
     jnz     .l_help
+
     mov     rdi, r8
     lea     rsi, [opt_version]
     call    streq
     test    eax, eax
     jnz     .l_version
+
     mov     rdi, r8
     lea     rsi, [opt_scalar]
     call    streq
     test    eax, eax
     jnz     .l_scalar
+
+    mov     rdi, r8
+    lea     rsi, [opt_color_auto]
+    call    streq
+    test    eax, eax
+    jnz     .l_color_auto
+
+    mov     rdi, r8
+    lea     rsi, [opt_color_always]
+    call    streq
+    test    eax, eax
+    jnz     .l_color_always
+
+    mov     rdi, r8
+    lea     rsi, [opt_color_never]
+    call    streq
+    test    eax, eax
+    jnz     .l_color_never
+
     lea     rdi, [msg_unrec]
     call    err_msg
     mov     rdi, r8
     call    err_msg_tail
     mov     eax, 2
     jmp     .out
+
 .l_help:
     or      qword [r14], 8
     jmp     .next_arg
+
 .l_version:
     or      qword [r14], 16
     jmp     .next_arg
+
 .l_scalar:
     or      qword [r14], 4
+    jmp     .next_arg
+
+.l_color_auto:
+    and     qword [r14], -97
+    jmp     .next_arg
+
+.l_color_always:
+    and     qword [r14], -97
+    or      qword [r14], 32
+    jmp     .next_arg
+
+.l_color_never:
+    and     qword [r14], -97
+    or      qword [r14], 64
     jmp     .next_arg
 .positional:
     cmp     qword [r14 + 8], 0
@@ -243,5 +282,9 @@ msg_unrec:   db "unrecognized option: ", 0
 msg_extra:   db "too many arguments", 10, 0
 msg_nopat:   db "missing pattern", 10, 0
 msg_nofile:  db "missing file operand", 10, 0
+
+opt_color_auto:   db "--color=auto", 0
+opt_color_always: db "--color=always", 0
+opt_color_never:  db "--color=never", 0
 
 gnu_stack

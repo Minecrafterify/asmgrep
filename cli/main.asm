@@ -24,9 +24,13 @@ extern ag_utoa
 %define F_OPTS      0               ; flags, pattern, file
 %define F_MAP       24              ; addr, len
 %define F_PATLEN    40
-%define F_SCRATCH   48              ; 32 bytes for numbers
+%define F_SCRATCH   48              ; scratch space
 %define F_STACKARG  80
-%define F_SIZE      96
+%define F_CTX       96              ; callback context
+; F_CTX + 0: pattern pointer
+; F_CTX + 8: pattern length
+; F_CTX + 16: color enabled
+%define F_SIZE      128
 
 section .text
 
@@ -56,6 +60,37 @@ _start:
     call    ag_memchr
     cmp     rax, [rsp + F_PATLEN]
     jb      bad_pattern
+
+    ; Set up callback context.
+    mov     rax, [rsp + F_OPTS + 8]
+    mov     [rsp + F_CTX], rax
+    mov     rax, [rsp + F_PATLEN]
+    mov     [rsp + F_CTX + 8], rax
+    mov     qword [rsp + F_CTX + 16], 0
+
+    ; --color=always
+    mov     rax, [rsp + F_OPTS]
+    test    rax, 32
+    jnz     .color_on
+
+    ; --color=never
+    test    rax, 64
+    jnz     .color_done
+
+    ; --color=auto: check whether stdout is a terminal.
+    mov     eax, SYS_ioctl
+    mov     edi, 1
+    mov     esi, 0x5413
+    lea     rdx, [rsp + F_SCRATCH]
+    syscall
+
+    test    rax, rax
+    js      .color_done
+
+.color_on:
+    mov     qword [rsp + F_CTX + 16], 1
+
+.color_done:
 
     mov     rdi, [rsp + F_OPTS + 16]
     lea     rsi, [rsp + F_MAP]
@@ -87,7 +122,7 @@ _start:
     mov     rsi, [rsp + F_MAP + 8]
     mov     rdx, [rsp + F_OPTS + 8]
     mov     rcx, [rsp + F_PATLEN]
-    xor     r9d, r9d
+    lea     r9, [rsp + F_CTX]
     sub     rsp, 16
     mov     rax, [rsp + 16 + F_STACKARG]
     mov     [rsp], rax
@@ -108,8 +143,11 @@ _start:
     lea     rsi, [rsp + F_SCRATCH]
     call    ag_utoa
     mov     byte [rsp + F_SCRATCH + rax], 10
-    lea     rsi, [rax + 1]
+    lea     rsi, [rsp + F_SCRATCH + rax + 1]
     lea     rdi, [rsp + F_SCRATCH]
+    mov     rdx, rsi
+    sub     rdx, rdi
+    mov     rsi, rdx
     call    cli_put
     test    rax, rax
     js      write_error
@@ -219,6 +257,7 @@ help_text:
     db "  -n          prefix each line with its line number", 10
     db "  -c          print only the number of matching lines", 10
     db "      --scalar  use the scalar reference search instead of SSE2", 10
+    db "      --color=WHEN  color matches: auto, always, or never", 10
     db "      --      end of options", 10
     db "  -h, --help  display this help and exit", 10
     db "  -V, --version  display version and exit", 10, 10

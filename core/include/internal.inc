@@ -33,6 +33,7 @@
 %define EOVERFLOW       75
 %define FLAG_LINENO     2
 %define FLAG_SCALAR     1
+%define SYS_ioctl       16
 
 %define SCAN_ERROR      -1
 
