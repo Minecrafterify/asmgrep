@@ -1,5 +1,5 @@
 
-# Build output
+#build output
 build/
 *.o
 *.so
@@ -8,7 +8,7 @@ build/
 *.class
 *.jar
 
-# Python
+#python
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -18,22 +18,23 @@ venv/
 dist/
 .eggs/
 
-# Test and coverage output
+#test and coverage output
 .coverage
 htmlcov/
 
-# Benchmark data
+#benchmark datasets and results
 benchmarks/data/
+benchmarks/results/
 
-# Temporary files
+#temporary files
 *.tmp
 *.log
 *~
 .DS_Store
 
-# VS Code (keep shared settings)
+#VS_Code(keeping shared settings)
 .vscode/*
 !.vscode/settings.json
 
-# Project extras
+#project extras
 roadmap.md
