@@ -9,10 +9,15 @@
 %define SYS_munmap      11
 %define SYS_exit        60
 %define SYS_openat      257
+%define SYS_getdents64  217
+%define SYS_newfstatat  262
 
 %define AT_FDCWD        -100
 %define O_RDONLY        0
 %define O_CLOEXEC       0x80000
+%define O_DIRECTORY     0x10000
+%define O_NOFOLLOW      0x20000
+%define AT_SYMLINK_NOFOLLOW 0x100
 %define PROT_READ       1
 %define PROT_WRITE      2
 %define MAP_PRIVATE     2
@@ -36,6 +41,11 @@
 %define SYS_ioctl       16
 
 %define SCAN_ERROR      -1
+
+%define DT_UNKNOWN      0
+%define DT_DIR          4
+%define DT_REG          8
+%define DT_LNK          10
 
 %macro export_fn 1
     global %1:function hidden

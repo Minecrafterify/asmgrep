@@ -1,6 +1,12 @@
+
 ; Command-line parsing.
 ;
-; struct cli_opts { uint64_t flags; const char *pattern; const char *file; };
+; struct cli_opts {
+;     uint64_t flags;
+;     const char *pattern;
+;     char **operands;
+;     uint64_t operand_count;
+; };
 ;
 ; int cli_parse(int argc, char **argv, struct cli_opts *o)
 ;     Returns 0 on success, 2 after printing a diagnostic on a usage error.
@@ -33,7 +39,7 @@ streq:
     xor     eax, eax
     ret
 
-; void err_msg(const char *s)   writes "asmgrep: " s to stderr
+; void err_msg(const char *s)
 err_msg:
     push    rbx
     mov     rbx, rdi
@@ -70,33 +76,44 @@ cli_parse:
     push    r14
     push    r15
     sub     rsp, 16
+
     mov     r12, rdi                ; argc
     mov     r13, rsi                ; argv
     mov     r14, rdx                ; opts
+
     xor     eax, eax
-    mov     [r14], rax
-    mov     [r14 + 8], rax
-    mov     [r14 + 16], rax
-    mov     ebx, 1                  ; index
+    mov     [r14], rax              ; flags
+    mov     [r14 + 8], rax          ; pattern
+    mov     [r14 + 16], rax         ; operands
+    mov     [r14 + 24], rax         ; operand_count
+
+    mov     ebx, 1                  ; argv index
     xor     r15d, r15d              ; options-ended flag
+
 .next_arg:
     cmp     rbx, r12
     jae     .finish
+
     mov     rdi, [r13 + rbx * 8]
     inc     rbx
+
     test    r15, r15
     jnz     .positional
+
     cmp     byte [rdi], '-'
     jne     .positional
     cmp     byte [rdi + 1], 0
-    je      .positional             ; a lone "-" is a file name
+    je      .positional             ; lone "-" is an operand
     cmp     byte [rdi + 1], '-'
     je      .long_opt
+
     lea     rsi, [rdi + 1]
+
 .short_loop:
     movzx   eax, byte [rsi]
     test    eax, eax
     jz      .next_arg
+
     cmp     al, 'n'
     je      .s_n
     cmp     al, 'c'
@@ -105,26 +122,48 @@ cli_parse:
     je      .s_h
     cmp     al, 'V'
     je      .s_v
+    cmp     al, 'r'
+    je      .s_r
+    cmp     al, 'R'
+    je      .s_R
+
     lea     rdi, [rsp]
     mov     byte [rdi], al
     mov     byte [rdi + 1], 0
     jmp     .bad_short
+
 .s_n:
     or      qword [r14], 1
     inc     rsi
     jmp     .short_loop
+
 .s_c:
     or      qword [r14], 2
     inc     rsi
     jmp     .short_loop
+
 .s_h:
     or      qword [r14], 8
     inc     rsi
     jmp     .short_loop
+
 .s_v:
     or      qword [r14], 16
     inc     rsi
     jmp     .short_loop
+
+.s_r:
+    or      qword [r14], 128
+    and     qword [r14], -257
+    inc     rsi
+    jmp     .short_loop
+
+.s_R:
+    or      qword [r14], 256
+    and     qword [r14], -129
+    inc     rsi
+    jmp     .short_loop
+
 .bad_short:
     lea     rdi, [msg_invalid]
     call    err_msg
@@ -132,11 +171,13 @@ cli_parse:
     call    err_msg_tail
     mov     eax, 2
     jmp     .out
+
 .long_opt:
     cmp     byte [rdi + 2], 0
     jne     .long_named
-    mov     r15d, 1                 ; "--"
+    mov     r15d, 1
     jmp     .next_arg
+
 .long_named:
     mov     r8, rdi
 
@@ -156,6 +197,18 @@ cli_parse:
     call    streq
     test    eax, eax
     jnz     .l_scalar
+
+    mov     rdi, r8
+    lea     rsi, [opt_recursive]
+    call    streq
+    test    eax, eax
+    jnz     .l_recursive
+
+    mov     rdi, r8
+    lea     rsi, [opt_recursive_follow]
+    call    streq
+    test    eax, eax
+    jnz     .l_recursive_follow
 
     mov     rdi, r8
     lea     rsi, [opt_color_auto]
@@ -194,6 +247,16 @@ cli_parse:
     or      qword [r14], 4
     jmp     .next_arg
 
+.l_recursive:
+    or      qword [r14], 128
+    and     qword [r14], -257
+    jmp     .next_arg
+
+.l_recursive_follow:
+    or      qword [r14], 256
+    and     qword [r14], -129
+    jmp     .next_arg
+
 .l_color_auto:
     and     qword [r14], -97
     jmp     .next_arg
@@ -207,37 +270,51 @@ cli_parse:
     and     qword [r14], -97
     or      qword [r14], 64
     jmp     .next_arg
+
 .positional:
     cmp     qword [r14 + 8], 0
-    jne     .second
+    jne     .operand
+
     mov     [r14 + 8], rdi
     jmp     .next_arg
-.second:
+
+.operand:
     cmp     qword [r14 + 16], 0
-    jne     .extra
-    mov     [r14 + 16], rdi
+    jne     .store_operand
+
+    lea     rax, [r13 + 8]
+    mov     [r14 + 16], rax
+
+.store_operand:
+    mov     rax, [r14 + 24]
+    inc     rax
+    mov     [r13 + rax * 8], rdi
+    inc     qword [r14 + 24]
     jmp     .next_arg
-.extra:
-    lea     rdi, [msg_extra]
-    call    usage_error
-    jmp     .out
+
 .finish:
     test    qword [r14], 8 | 16
     jnz     .ok
+
     cmp     qword [r14 + 8], 0
     je      .no_pat
-    cmp     qword [r14 + 16], 0
+
+    cmp     qword [r14 + 24], 0
     je      .no_file
+
 .ok:
     xor     eax, eax
     jmp     .out
+
 .no_pat:
     lea     rdi, [msg_nopat]
     call    usage_error
     jmp     .out
+
 .no_file:
     lea     rdi, [msg_nofile]
     call    usage_error
+
 .out:
     add     rsp, 16
     pop     r15
@@ -247,7 +324,7 @@ cli_parse:
     pop     rbx
     ret
 
-; Prints rdi followed by the usage hint (completes an option diagnostic).
+; Prints rdi followed by the usage hint.
 err_msg_tail:
     sub     rsp, 8
     mov     rbx, rdi
@@ -274,9 +351,13 @@ try_help:    db "Try 'asmgrep --help' for more information.", 10
 try_help_len equ $ - try_help
 quote_nl:    db 10
 quote_nl_len equ $ - quote_nl
-opt_help:    db "--help", 0
-opt_version: db "--version", 0
-opt_scalar:  db "--scalar", 0
+
+opt_help:            db "--help", 0
+opt_version:         db "--version", 0
+opt_scalar:          db "--scalar", 0
+opt_recursive:       db "--recursive", 0
+opt_recursive_follow: db "--dereference-recursive", 0
+
 msg_invalid: db "invalid option: -", 0
 msg_unrec:   db "unrecognized option: ", 0
 msg_extra:   db "too many arguments", 10, 0

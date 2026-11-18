@@ -1,4 +1,3 @@
-
 ; Buffered output for the command-line front end.
 
 %include "internal.inc"
@@ -129,12 +128,31 @@ cli_line_cb:
     mov     r14, [r13]
     mov     r15, [r13 + 8]
 
-    ; Save line boundaries.
+    ; Save line boundaries and line number.
     mov     [rsp + 32], rbx
     lea     rax, [rbx + r12]
     mov     [rsp + 40], rax
+    mov     [rsp + 56], rsi
 
+    ; Print filename prefix when provided.
+    mov     rdi, [r13 + 24]
+    test    rdi, rdi
+    jz      .line_number
+
+    mov     rsi, [r13 + 32]
+    call    cli_put
+    test    rax, rax
+    js      .fail
+
+    lea     rdi, [filename_separator]
+    mov     esi, 1
+    call    cli_put
+    test    rax, rax
+    js      .fail
+
+.line_number:
     ; Print line number if requested.
+    mov     rsi, [rsp + 56]
     test    rsi, rsi
     jz      .color_check
 
@@ -271,7 +289,7 @@ cli_line_cb:
 section .rodata
 
 newline: db 10
-
+filename_separator: db ':'
 color_red:   db 27, "[31m"
 color_red_len equ $ - color_red
 

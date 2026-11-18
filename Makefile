@@ -29,7 +29,7 @@ endif
 CORE_SRC  := search_scalar search_sse2 lines mmap file utils
 CORE_OBJ  := $(addprefix $(OBJDIR)/core/,$(addsuffix .o,$(CORE_SRC)))
 LIB_OBJ   := $(CORE_OBJ) $(OBJDIR)/core/api.o
-CLI_OBJ   := $(CORE_OBJ) $(OBJDIR)/cli/main.o $(OBJDIR)/cli/args.o $(OBJDIR)/cli/output.o
+CLI_OBJ := $(CORE_OBJ) $(OBJDIR)/cli/main.o $(OBJDIR)/cli/args.o $(OBJDIR)/cli/output.o $(OBJDIR)/cli/traverse.o
 
 CLI       := $(BUILD)/asmgrep
 LIBFILE   := $(BUILD)/libasmgrep.so.$(VERSION)
