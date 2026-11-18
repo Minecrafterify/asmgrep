@@ -574,11 +574,12 @@ cli_walk_dir:
     cmp     eax, S_IFLNK
     jne     .classify_child
 
-    ; -r: follow file symlinks, skip directory symlinks.
-    ; -R: follow symlinks to both files and directories.
+    ; -r skips all symlinks found during traversal.
+    ; -R follows symlinks to files and directories.
     test    qword [r12 + OPT_FLAGS], 256
-    jnz     .follow_link
+    jz      .next_entry
 
+    ; Follow symlink target (-R).
     mov     edi, AT_FDCWD
     lea     rsi, [rsp + W_PATH]
     lea     rdx, [rsp + W_STAT]
@@ -587,16 +588,10 @@ cli_walk_dir:
     syscall
 
     test    rax, rax
-    js      .next_entry
+    js      .child_stat_error
 
     mov     eax, [rsp + W_STAT + ST_MODE]
     and     eax, S_IFMT
-
-    cmp     eax, S_IFDIR
-    je      .next_entry
-
-    jmp     .classify_child
-
 .follow_link:
     mov     edi, AT_FDCWD
     lea     rsi, [rsp + W_PATH]
