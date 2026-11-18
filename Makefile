@@ -101,7 +101,7 @@ python: library
 # ---- Tests and benchmarks --------------------------------------------------
 
 test: all
-	@tests/run_tests.sh
+	@bash tests/run_tests.sh
 
 benchmark: cli
 	@benchmarks/benchmark.sh
